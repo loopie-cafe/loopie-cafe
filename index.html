@@ -77,6 +77,30 @@
 
   /* 1. the brew: footage inside the loop, which opens to the whole screen */
   .brew{height:760vh}
+  /* opening: the cafe logo writes itself in, catches the light, then the black opens in a loop onto the site */
+  @property --hole{syntax:"<length>";inherits:false;initial-value:0px}
+  .intro{position:fixed;inset:0;z-index:60;background:#000;display:grid;place-items:center;--hole:0px;-webkit-mask:radial-gradient(circle at 50% 50%,transparent var(--hole),#000 calc(var(--hole) + 1px));mask:radial-gradient(circle at 50% 50%,transparent var(--hole),#000 calc(var(--hole) + 1px))}
+  .intro .lg{position:relative;width:min(66vw,520px);aspect-ratio:1000/649}
+  .intro img{display:block;width:100%;height:100%}
+  .intro .lg::after{content:"";position:absolute;inset:0;-webkit-mask:url(assets/img/logo.webp) center/100% 100% no-repeat;mask:url(assets/img/logo.webp) center/100% 100% no-repeat;background:linear-gradient(105deg,transparent 40%,rgba(255,246,222,.95) 50%,transparent 60%) 220% 0/260% 100% no-repeat}
+  .intro i{position:absolute;left:50%;bottom:calc(50% - min(33vw,260px)*.649 - 28px);width:min(40vw,300px);height:1px;margin-left:calc(min(40vw,300px)/-2);background:linear-gradient(90deg,transparent,#c9ac76,transparent);transform:scaleX(0)}
+  .intro.go{animation:hole .95s cubic-bezier(.7,0,.25,1) forwards;pointer-events:none}
+  .intro.go .lg{animation:lgout .6s cubic-bezier(.5,0,.75,0) forwards}
+  .intro.go i{animation:fade .3s forwards}
+  @media (prefers-reduced-motion:no-preference){
+    .intro img{animation:write 1.25s .25s cubic-bezier(.65,0,.25,1) both}
+    .intro .lg{animation:settle 1.6s .2s cubic-bezier(.2,.7,.2,1) both}
+    .intro .lg::after{animation:sheen 1.1s 1.35s ease-in-out both}
+    .intro i{animation:line 1s .9s cubic-bezier(.2,.7,.2,1) forwards}
+  }
+  @media (prefers-reduced-motion:reduce){.intro.go{animation:fade .5s forwards}}
+  @keyframes write{from{clip-path:inset(0 100% 0 0);filter:blur(6px)}to{clip-path:inset(0 0 0 0);filter:blur(0)}}
+  @keyframes settle{from{transform:scale(.94);opacity:0}30%{opacity:1}to{transform:none;opacity:1}}
+  @keyframes sheen{from{background-position:220% 0}to{background-position:-120% 0}}
+  @keyframes line{to{transform:scaleX(1)}}
+  @keyframes lgout{to{transform:scale(1.14);opacity:0;filter:blur(4px)}}
+  @keyframes hole{to{--hole:75vmax}}
+  @keyframes fade{to{opacity:0}}
   .brew .stage{background:var(--ink)}
   .scrim{position:absolute;inset:0;background:#000;opacity:0}
   .hero{position:absolute;inset-inline:var(--gut);top:calc(var(--nav) + 8vh);max-width:min(52vw,820px);z-index:2}
@@ -219,6 +243,8 @@
 </style>
 </head>
 <body>
+<div class="intro" id="intro" role="img" aria-label="Loopie Cafe"><div class="lg"><img src="assets/img/logo.webp" alt=""></div><i></i></div>
+<script>try { if (sessionStorage.getItem("loopie-intro")) document.getElementById("intro").remove(); } catch (e) {}</script>
 <div id="app"></div>
 
 <script>
@@ -644,6 +670,19 @@
     scrollTo(0, backEl.offsetTop + +back[1] * backEl.offsetHeight);
   }
   brew(0); roast(0); drinks(0); pour(0); frame();
+
+  /* the opening leaves on its own once the logo has had its moment; a tap skips it */
+  var intro = $("intro");
+  if (intro) {
+    try { sessionStorage.setItem("loopie-intro", "1"); } catch (e) {}
+    var leave = function () {
+      if (intro.classList.contains("go")) return;
+      intro.classList.add("go");
+      setTimeout(function () { intro.remove(); }, reduce ? 500 : 950);
+    };
+    setTimeout(leave, reduce ? 900 : 2700);
+    intro.addEventListener("click", leave);
+  }
 })();
 </script>
 </body>
