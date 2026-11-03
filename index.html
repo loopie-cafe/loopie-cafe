@@ -303,8 +303,7 @@
   h += '</div></div><div class="iris" id="f3" style="background:#EBB81F"></div></div></section>';
 
   /* 4. together */
-  h += '<section class="say" id="say"><div><h2 class="rise">' + t.together + '</h2><p class="big rise" style="--i:1">' + esc(C.about) + '</p><p class="small rise" style="--i:2">' + esc(C.hashtag) +
-       (C.rating ? ' · ' + esc(t.rating(C.rating.value, C.rating.count)) : "") + '</p></div>' +
+  h += '<section class="say" id="say"><div><h2 class="rise">' + t.together + '</h2><p class="big rise" style="--i:1">' + esc(C.about) + '</p></div>' +
        (C.aboutPhoto ? '<figure class="disc rise" style="--i:1"><img src="' + esc(C.aboutPhoto.src) + '" alt="' + esc(C.aboutPhoto.alt) + '" loading="lazy"></figure>' : "") + '</section>';
 
   /* 5. menu */
@@ -328,7 +327,7 @@
   h += '</div><div class="iris" id="f5" style="background:#fff"></div></div></section>';
 
   /* 7. visit */
-  h += '<section class="visit" id="visit"><div><h2 class="rise">' + t.visit + '</h2><p class="addr rise" style="--i:1">' + esc(C.address) + '</p><div class="facts rise" style="--i:2">';
+  h += '<section class="visit" id="visit"><div><h2 class="rise">' + t.visit + '</h2><div class="facts rise" style="--i:1">';
   if (C.hours === "24h") h += '<p>' + t.allDay + '</p>';
   else if (C.hours) {
     var today = new Date().getDay();
@@ -618,6 +617,9 @@
   q(".langb").forEach(function (b) {
     b.addEventListener("click", function () {
       store("loopie-lang", t.otherLang);
+      /* the other language has its own page heights, so the place is kept as a section and how far into it */
+      var at = q("section").filter(function (x) { return x.offsetTop <= scrollY + 1; }).pop();
+      if (at) store("loopie-at", at.id + ":" + (scrollY - at.offsetTop) / at.offsetHeight);
       location.href = location.pathname + "?lang=" + t.otherLang + location.hash;
     });
   });
@@ -635,6 +637,12 @@
   q("a", mnav).forEach(function (a) { a.addEventListener("click", function () { setMenu(false); }); });
   addEventListener("keydown", function (e) { if (e.key === "Escape" && !mnav.hidden) setMenu(false); });
 
+  var back = (store("loopie-at") || "").split(":"), backEl = back[0] && $(back[0]);
+  if (backEl) {
+    store("loopie-at", "");
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    scrollTo(0, backEl.offsetTop + +back[1] * backEl.offsetHeight);
+  }
   brew(0); roast(0); drinks(0); pour(0); frame();
 })();
 </script>
