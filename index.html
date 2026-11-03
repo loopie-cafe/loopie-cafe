@@ -71,7 +71,8 @@
   .stage{position:sticky;top:0;height:100svh;overflow:hidden}
   canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* each scene closes as a loop opening onto the next scene's color */
-  .iris{position:absolute;inset:0;z-index:6;visibility:hidden;pointer-events:none}
+  /* drawn small and scaled up, so the phone never holds a screen-sized texture for it */
+  .iris{position:absolute;left:50%;top:50%;width:20vmax;height:20vmax;margin:-10vmax 0 0 -10vmax;border-radius:50%;z-index:6;visibility:hidden;pointer-events:none;transform:scale(0);will-change:transform}
   .hide{visibility:hidden}
 
   /* 1. the brew: footage inside the loop, which opens to the whole screen */
@@ -109,7 +110,7 @@
   .rdisc{position:absolute;left:50%;top:54%;width:min(70vh,92vw);aspect-ratio:1;transform:translate(-50%,-50%);background:#fff;opacity:.2}
   .bean{position:absolute;left:50%;top:54%;width:min(62vh,82vw);aspect-ratio:1555/1192;transform:translate(-50%,-50%);z-index:2;will-change:transform}
   .bean img{position:absolute;inset:0;object-fit:contain}
-  .crack{position:absolute;inset-inline:0;top:54%;text-align:center;font:800 min(22vw,38vh)/1 var(--display);transform:translateY(-50%);z-index:3;color:#fff;mix-blend-mode:overlay;pointer-events:none}
+  .crack{position:absolute;inset-inline:0;top:54%;text-align:center;font:800 min(22vw,38vh)/1 var(--display);transform:translateY(-50%);z-index:3;color:rgba(255,255,255,.6);pointer-events:none}
   .rhead{position:absolute;top:calc(var(--nav) + 3vh);inset-inline-end:var(--gut);font-size:var(--lead);line-height:1.2;max-width:12em;text-align:end;z-index:3}
   .temp{position:absolute;top:calc(var(--nav) + 2vh);inset-inline-start:var(--gut);font-size:var(--giant);line-height:1;font-variant-numeric:tabular-nums;z-index:3}
   .temp sup{font-size:.36em;vertical-align:.9em}
@@ -169,7 +170,8 @@
   /* invite: the clip grows from a loop to the whole screen */
   .pour{height:300vh;background:var(--ink)}
   .pour .stage{background:var(--ink)}
-  .vid{position:absolute;inset:0;will-change:clip-path}
+  .vid{position:absolute;left:50%;top:50%;width:var(--d);height:var(--d);margin:calc(var(--d)/-2) 0 0 calc(var(--d)/-2);border-radius:50%;overflow:hidden;will-change:transform}
+  .vid video{position:absolute;left:50%;top:50%;width:100vw;height:100svh;margin:-50svh 0 0 -50vw;will-change:transform}
   .inv{position:absolute;inset-inline:var(--gut);bottom:calc(var(--bar) + clamp(24px,6vh,56px));display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 32px;z-index:2}
   .inv h2{max-width:14em}
 
@@ -364,20 +366,22 @@
   var mix = function (a, b, v) { a = rgb(a); b = rgb(b); return "rgb(" + a.map(function (n, i) { return Math.round(lerp(n, b[i], v)); }).join(",") + ")"; };
   /* an overlay at zero opacity also leaves the layout's reach, so it can't cover what's beneath */
   var show = function (el, o) { el.style.opacity = o; el.style.visibility = o > 0 ? "visible" : "hidden"; };
-  var iris = function (el, v) { el.style.visibility = v > 0 ? "visible" : "hidden"; el.style.clipPath = "circle(" + v * 150 + "% at 50% 50%)"; };
+  var iris = function (el, v) { el.style.visibility = v > 0 ? "visible" : "hidden"; el.style.transform = "scale(" + v * 8 + ")"; };
   var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ---------- frame sequence on canvas ---------- */
   var portrait = innerWidth / innerHeight < 1;
   /* data saver: every third frame is enough to follow the scene */
-  var fine = navigator.connection && navigator.connection.saveData ? 3 : 1;
+  var conn = navigator.connection || {}, slow = conn.saveData || /2g|3g/.test(conn.effectiveType || "");
+  var fine = slow ? 4 : portrait ? 2 : 1, lanes = slow ? 2 : portrait ? 4 : 6;
   var queue = [], active = 0;
   function pump() {
-    while (active < 6 && queue.length) {
+    while (active < lanes && queue.length) {
       active++;
       (function (job) {
         var im = new Image(), done = function () { active--; pump(); req(); };
-        im.onload = function () { job.seq.imgs[job.i] = im; job.seq.dirty = true; done(); };
+        /* decode off the main thread before the frame can be drawn, so scrolling never waits on a decode */
+        im.onload = function () { (im.decode ? im.decode() : Promise.resolve()).catch(function () {}).then(function () { job.seq.imgs[job.i] = im; job.seq.dirty = true; done(); }); };
         im.onerror = done;
         im.src = job.seq.base + String(job.i + 1).padStart(3, "0") + ".webp";
       })(queue.shift());
@@ -392,17 +396,23 @@
     add(0); for (var i = 0; i < s.n; i += 12) add(i); for (i = 0; i < s.n; i += 4) add(i); for (i = 0; i < s.n; i += fine) add(i);
     pump();
   }
-  function draw(s, x) {
+  /* phones get a lighter canvas: 1.5 pixels per point is sharp on video and a third of the work of 3 */
+  var DPR = Math.min(devicePixelRatio || 1, portrait ? 1.5 : 2);
+  function draw(s, x, mask) {
     s.at = Math.round(x * (s.n - 1));
     var im = null;
     for (var d = 0; d < s.n && !im; d++) im = s.imgs[s.at - d] || s.imgs[s.at + d];
-    if (!im || (im === s.shown && !s.dirty)) return;
-    s.shown = im; s.dirty = false;
-    var dpr = Math.min(devicePixelRatio || 1, 2), w = Math.round(s.cv.clientWidth * dpr), hh = Math.round(s.cv.clientHeight * dpr);
+    var key = mask ? Math.round(mask.r) : -1;
+    if (!im || (im === s.shown && !s.dirty && key === s.mask)) return;
+    s.shown = im; s.dirty = false; s.mask = key;
+    var w = Math.round(s.cv.clientWidth * DPR), hh = Math.round(s.cv.clientHeight * DPR), c = s.ctx;
     if (s.cv.width !== w || s.cv.height !== hh) { s.cv.width = w; s.cv.height = hh; }
-    s.ctx.imageSmoothingQuality = "high";
+    c.imageSmoothingQuality = portrait ? "medium" : "high";
     var r = Math.max(w / im.naturalWidth, hh / im.naturalHeight), iw = im.naturalWidth * r, ih = im.naturalHeight * r;
-    s.ctx.drawImage(im, (w - iw) / 2, (hh - ih) / 2, iw, ih);
+    c.clearRect(0, 0, w, hh);
+    if (mask) { c.save(); c.beginPath(); c.arc(mask.x * DPR, mask.y * DPR, mask.r * DPR, 0, Math.PI * 2); c.clip(); }
+    c.drawImage(im, (w - iw) / 2, (hh - ih) / 2, iw, ih);
+    if (mask) c.restore();
   }
   var seq1 = sequence($("cv1"), "brew", 162);
   load(seq1);
@@ -410,17 +420,15 @@
   /* ---------- scenes ---------- */
   var caps = q(".cap"), cv1 = $("cv1");
   /* the footage starts in a giant circle cropped by the screen, then opens to fill it */
-  function loopOpen(el, v) {
+  function loopOpen(v) {
     var W = innerWidth, H = innerHeight, phone = W < 860, x, y, r0;
     if (phone) { r0 = W * .68; x = W / 2; y = H * .6 + r0; }
     else { r0 = H * (lang === "en" ? .52 : .6); x = W * (lang === "en" ? .88 : .16); y = H * .56; }
-    var r = lerp(r0, Math.hypot(Math.max(x, W - x), Math.max(y, H - y)) + 2, v);
-    el.style.clipPath = v >= 1 ? "none" : "circle(" + r + "px at " + x + "px " + y + "px)";
+    return v >= 1 ? null : { x: x, y: y, r: lerp(r0, Math.hypot(Math.max(x, W - x), Math.max(y, H - y)) + 2, v) };
   }
   function brew(raw) {
     var p = Math.min(1, raw / .9), open = ease(seg(p, .02, .12));
-    draw(seq1, seg(p, .02, .88));
-    loopOpen(cv1, open);
+    draw(seq1, seg(p, .02, .88), loopOpen(open));
     show($("hero"), 1 - seg(p, .015, .07));
     $("hero").style.pointerEvents = p < .05 ? "auto" : "none";
     caps.forEach(function (c) {
@@ -509,8 +517,10 @@
 
   var vid = $("vid"), video = $("video");
   function pour(p) {
-    var W = innerWidth, H = innerHeight, r0 = Math.min(W, H) * .32, v = ease(seg(p, .02, .6));
-    vid.style.clipPath = v >= 1 ? "none" : "circle(" + lerp(r0, Math.hypot(W, H) / 2 + 2, v) + "px at 50% 50%)";
+    var W = innerWidth, H = innerHeight, full = Math.hypot(W, H) + 4, r0 = Math.min(W, H) * .32, v = ease(seg(p, .02, .6)), sc = lerp(r0 * 2, full, v) / full;
+    vid.style.setProperty("--d", full + "px");
+    vid.style.transform = "scale(" + sc + ")";
+    video.style.transform = "scale(" + 1 / sc + ")";
     $("pscrim").style.opacity = lerp(0, .3, seg(p, .45, .65));
     show($("inv"), seg(p, .55, .72));
   }
