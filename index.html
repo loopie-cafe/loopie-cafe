@@ -372,7 +372,8 @@
   var portrait = innerWidth / innerHeight < 1;
   /* data saver: every third frame is enough to follow the scene */
   var conn = navigator.connection || {}, slow = conn.saveData || /2g|3g/.test(conn.effectiveType || "");
-  var fine = slow ? 4 : portrait ? 2 : 1, lanes = slow ? 2 : portrait ? 4 : 6;
+  /* phone frames are light enough to load every one; a slow line takes every third */
+  var fine = slow ? 3 : 1, lanes = slow ? 2 : portrait ? 4 : 6;
   var active = 0, seqs = [];
   /* every eighth frame comes first so the whole scene can be scrubbed early, then the rest fill in ahead of the visitor */
   function nextJob() {
